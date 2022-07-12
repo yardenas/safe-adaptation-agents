@@ -1,130 +1,88 @@
-from typing import Tuple, Iterator, Optional
+from typing import Iterator
 
 import numpy as np
-from tensorflow import data as tfd
+import tensorflow as tf
+import tensorflow_datasets as tfds
+from gym.spaces import Space
+from tf_agents.replay_buffers import episodic_replay_buffer
 
-from safe_adaptation_agents import agents
 from safe_adaptation_agents import episodic_trajectory_buffer as etb
+from safe_adaptation_agents.agents import Transition
 
 
 class ReplayBuffer:
 
-  def __init__(self, observation_shape: Tuple, action_shape: Tuple,
-               max_length: int, seed: int, capacity: int, batch_size: int,
-               sequence_length: int, precision: int):
+  def __init__(self, capacity: int, observation_space: Space,
+               action_space: Space, batch_size: int, length: int,
+               precision: int, seed: int):
+    super(ReplayBuffer, self).__init__()
+    dtype = {16: tf.float16, 32: tf.float32}[precision]
+    self._sequence_length = length
+    data_spec = {
+        'observation': tf.TensorSpec(observation_space.shape, tf.uint8),
+        'action': tf.TensorSpec(action_space.shape, dtype),
+        'reward': tf.TensorSpec((), dtype),
+        'cost': tf.TensorSpec((), dtype)
+    }
+    self._current_episode = {
+        'observation': [],
+        'action': [],
+        'reward': [],
+        'cost': [],
+    }
+    self._buffer = episodic_replay_buffer.EpisodicReplayBuffer(
+        data_spec,
+        seed=seed,
+        capacity=capacity,
+        buffer_size=1,
+        dataset_drop_remainder=True,
+        completed_only=False,
+        begin_episode_fn=lambda _: True,
+        end_episode_fn=lambda _: True)
     self.idx = 0
-    self.episode_id = 0
-    self.dtype = {16: np.float16, 32: np.float32}[precision]
-    self.obs_dtype = np.uint8 if len(observation_shape) == 3 else self.dtype
-    self.observation = np.zeros(
-        (
-            capacity,
-            max_length + 1,
-        ) + observation_shape, dtype=self.obs_dtype)
-    self.action = np.zeros(
-        (
-            capacity,
-            max_length,
-        ) + action_shape, dtype=self.dtype)
-    self.reward = np.zeros((
-        capacity,
-        max_length,
-    ), dtype=self.dtype)
-    self.cost = np.zeros((
-        capacity,
-        max_length,
-    ), dtype=self.dtype)
-    self._valid_episodes = 0
-    self.rs = np.random.RandomState(seed)
-    example = next(
-        iter(self._sample_batch(batch_size, sequence_length, capacity)))
-    self._generator = lambda: self._sample_batch(batch_size, sequence_length)
-    self._dataset = _make_dataset(self._generator, example)
+    self._dtype = dtype
+    self._dataset = self._buffer.as_dataset(batch_size,
+                                            self._sequence_length + 1)
+    self._dataset = self._dataset.map(self._preprocess,
+                                      tf.data.experimental.AUTOTUNE)
+    self._dataset = self._dataset.prefetch(10)
 
-  def add(self, transition: agents.Transition):
-    """
-    Adds transitions to the current running trajectory.
-    """
-    capacity, episode_length = self.reward.shape
-    batch_size = min(transition.observation.shape[0], capacity)
-    # Discard data if batch size overflows capacity.
-    end = min(self.episode_id + batch_size, capacity)
-    episode_slice = slice(self.episode_id, end)
-    for data, val in zip(
-        (self.action, self.reward, self.cost),
-        (transition.action, transition.reward, transition.cost)):
-      data[episode_slice, self.idx] = val[:batch_size].astype(self.dtype)
-    observation = transition.observation[:batch_size].astype(self.obs_dtype)
-    self.observation[episode_slice, self.idx] = observation
-    if transition.last:
-      assert self.idx == episode_length - 1
-      self.observation[episode_slice,
-                       self.idx + 1] = transition.next_observation[:batch_size]
-      self.episode_id = (self.episode_id + batch_size) % capacity
-      self._valid_episodes = min(self._valid_episodes + 1, capacity)
-    self.idx = (self.idx + 1) % episode_length
+  def _preprocess(self, episode, _):
+    episode['observation'] = preprocess(
+        tf.cast(episode['observation'], self._dtype))
+    # Shift observations, terminals and rewards by one timestep, since RSSM
+    # always uses the *previous* action and state together with *current*
+    # observation to infer the *current* state.
+    episode['observation'] = episode['observation'][:, 1:]
+    episode['cost'] = episode['cost'][:, 1:]
+    episode['reward'] = episode['reward'][:, 1:]
+    episode['action'] = episode['action'][:, :-1]
+    return episode
 
-  def _sample_batch(self,
-                    batch_size: int,
-                    sequence_length: int,
-                    valid_episodes: Optional[int] = None):
-    if valid_episodes is not None:
-      valid_episodes = valid_episodes
-    else:
-      valid_episodes = self._valid_episodes
-    time_limit = self.observation.shape[1]
-    assert time_limit > sequence_length
-    while True:
-      low = self.rs.choice(time_limit - sequence_length - 1, batch_size)
-      timestep_ids = low[:, None] + np.tile(
-          np.arange(sequence_length + 1),
-          (batch_size, 1),
-      )
-      episode_ids = self.rs.choice(valid_episodes, size=batch_size)
-      # Sample a sequence of length H for the actions, rewards and costs,
-      # and a length of H + 1 for the observations (which is needed for
-      # bootstrapping)
-      a, r, c = [
-          x[episode_ids[:, None], timestep_ids[:, :-1]] for x in (
-              self.action,
-              self.reward,
-              self.cost,
-          )
-      ]
-      o = self.observation[episode_ids[:, None], timestep_ids]
-      if self.obs_dtype == np.uint8:
-        o = preprocess(o).astype(self.dtype)
-      yield o, a, r, c
+  def store(self, transition: Transition):
+    episode_end = transition.last
+    self._current_episode['observation'].append(transition.observation[0])
+    self._current_episode['action'].append(transition.action[0])
+    self._current_episode['reward'].append(transition.reward[0])
+    self._current_episode['cost'].append(transition.cost[0])
+    if episode_end:
+      self._current_episode['observation'].append(transition.next_observation)
+      episode = {k: np.asarray(v) for k, v in self._current_episode.items()}
+      episode['observation'] = quantize(episode['observation'])
+      new_idx = self._buffer.add_sequence(episode,
+                                          tf.constant(self.idx, tf.int64))
+      self.idx = int(new_idx)
+      self._current_episode = {k: [] for k in self._current_episode.keys()}
 
   def sample(self, n_batches: int) -> Iterator[etb.TrajectoryData]:
-    if self.empty:
-      return
-    for batch in self._dataset.take(n_batches):
-      yield etb.TrajectoryData(*map(lambda x: x.numpy(), batch))
-
-  def __getstate__(self):
-    state = self.__dict__.copy()
-    del state['_dataset']
-    return state
-
-  def __setstate__(self, state):
-    self.__dict__.update(state)
-    example = next(iter(self._generator()))
-    self._dataset = _make_dataset(self._generator, example)
-
-  @property
-  def empty(self):
-    return self._valid_episodes == 0
+    for batch in tfds.as_numpy(self._dataset.take(n_batches)):
+      yield etb.TrajectoryData(batch['observation'], batch['action'],
+                               batch['reward'], batch['cost'])
 
 
 def preprocess(image):
-  return image / 255. - .5
+  return image / 255.0 - 0.5
 
 
-def _make_dataset(generator, example):
-  dataset = tfd.Dataset.from_generator(
-      generator,
-      *zip(*tuple((v.dtype, v.shape) for v in example)),
-  )
-  dataset = dataset.prefetch(10)
-  return dataset
+def quantize(image):
+  return ((image + 0.5) * 255).astype(np.uint8)
