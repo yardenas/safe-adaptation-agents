@@ -52,20 +52,21 @@ class ReplayBuffer:
     # Shift observations, terminals and rewards by one timestep, since RSSM
     # always uses the *previous* action and state together with *current*
     # observation to infer the *current* state.
-    episode['observation'] = episode['observation'][:, 1:]
-    episode['cost'] = episode['cost'][:, 1:]
-    episode['reward'] = episode['reward'][:, 1:]
+    episode['observation'] = episode['observation']
+    episode['cost'] = episode['cost'][:, :-1]
+    episode['reward'] = episode['reward'][:, :-1]
     episode['action'] = episode['action'][:, :-1]
     return episode
 
-  def store(self, transition: Transition):
+  def add(self, transition: Transition):
     episode_end = transition.last
     self._current_episode['observation'].append(transition.observation[0])
     self._current_episode['action'].append(transition.action[0])
     self._current_episode['reward'].append(transition.reward[0])
     self._current_episode['cost'].append(transition.cost[0])
     if episode_end:
-      self._current_episode['observation'].append(transition.next_observation)
+      self._current_episode['observation'].append(
+          transition.next_observation[0])
       episode = {k: np.asarray(v) for k, v in self._current_episode.items()}
       new_idx = self._buffer.add_sequence(episode,
                                           tf.constant(self.idx, tf.int64))
