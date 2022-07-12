@@ -68,7 +68,6 @@ class ReplayBuffer:
     if episode_end:
       self._current_episode['observation'].append(transition.next_observation)
       episode = {k: np.asarray(v) for k, v in self._current_episode.items()}
-      episode['observation'] = quantize(episode['observation'])
       new_idx = self._buffer.add_sequence(episode,
                                           tf.constant(self.idx, tf.int64))
       self.idx = int(new_idx)
@@ -91,7 +90,3 @@ class ReplayBuffer:
 
 def preprocess(image):
   return image / 255.0 - 0.5
-
-
-def quantize(image):
-  return ((image + 0.5) * 255).astype(np.uint8)
