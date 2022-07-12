@@ -79,6 +79,15 @@ class ReplayBuffer:
       yield etb.TrajectoryData(batch['observation'], batch['action'],
                                batch['reward'], batch['cost'])
 
+  def __getstate__(self):
+    state = self.__dict__.copy()
+    del state['_dataset']
+    del state['_buffer']
+    return state
+
+  def __setstate__(self, state):
+    self.__dict__.update(state)
+
 
 def preprocess(image):
   return image / 255.0 - 0.5
