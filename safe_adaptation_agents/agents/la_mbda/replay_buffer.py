@@ -1,9 +1,8 @@
-from typing import Iterator
+from typing import Iterator, Tuple
 
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-from gym.spaces import Space
 from tf_agents.replay_buffers import episodic_replay_buffer
 
 from safe_adaptation_agents import episodic_trajectory_buffer as etb
@@ -12,15 +11,15 @@ from safe_adaptation_agents.agents import Transition
 
 class ReplayBuffer:
 
-  def __init__(self, capacity: int, observation_space: Space,
-               action_space: Space, batch_size: int, length: int,
-               precision: int, seed: int):
+  def __init__(self, observation_shape: Tuple, action_shape: Tuple,
+               max_length: int, seed: int, capacity: int, batch_size: int,
+               sequence_length: int, precision: int):
     super(ReplayBuffer, self).__init__()
     dtype = {16: tf.float16, 32: tf.float32}[precision]
-    self._sequence_length = length
+    self._sequence_length = sequence_length
     data_spec = {
-        'observation': tf.TensorSpec(observation_space.shape, tf.uint8),
-        'action': tf.TensorSpec(action_space.shape, dtype),
+        'observation': tf.TensorSpec(observation_shape, tf.uint8),
+        'action': tf.TensorSpec(action_shape, dtype),
         'reward': tf.TensorSpec((), dtype),
         'cost': tf.TensorSpec((), dtype)
     }
