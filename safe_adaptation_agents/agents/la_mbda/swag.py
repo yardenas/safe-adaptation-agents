@@ -7,6 +7,7 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 import jmp
+import optax
 
 from safe_adaptation_agents import utils as u
 
@@ -27,7 +28,19 @@ class SWAGLearningState(NamedTuple):
 
   @property
   def iterations(self):
-    return self.learning_state.opt_state[1].count
+    return self.learning_state.opt_state[1][1].count
+
+
+def cyclic_learning_rate(initial_value: float, peak_value: float,
+                         cycle_steps: int):
+
+  def schedule(count):
+    cycle = jnp.floor(1 + count / (2. * cycle_steps))
+    progress = jnp.abs(count / cycle_steps - 2 * cycle + 1)
+    y = jnp.maximum(0, (1. - progress))
+    return peak_value - (peak_value - initial_value) * y
+
+  return schedule
 
 
 class SWAG(u.Learner):
@@ -42,9 +55,21 @@ class SWAG(u.Learner):
                start_averaging: int,
                average_period: int,
                max_num_models: int,
+               learning_rate_factor: float,
                scale: float = 1.):
     super(SWAG, self).__init__(model, seed, optimizer_config, precision,
                                *input_example)
+    base_lr = optimizer_config.get('lr', 1e-3)
+    schedule = cyclic_learning_rate(base_lr, base_lr * learning_rate_factor,
+                                    average_period)
+    self.optimizer = optax.flatten(
+        optax.chain(
+            optax.clip_by_global_norm(
+                optimizer_config.get('clip', float('inf'))),
+            optax.adam(
+                learning_rate=schedule, eps=optimizer_config.get('eps', 1e-8)),
+        ))
+    self.opt_state = self.optimizer.init(self.params)
     self._start_averaging = start_averaging
     self._average_period = average_period
     self._max_num_models = max_num_models
@@ -91,7 +116,7 @@ class SWAG(u.Learner):
                     covariance: hk.Params) -> [hk.Params, hk.Params, hk.Params]:
     # number of times snapshots of weights have been taken (using max to
     # avoid negative values of num_snapshots).
-    iterations = updated_state.opt_state[1].count
+    iterations = updated_state.opt_state[1][1].count
     num_snapshots = jnp.maximum(0, (iterations - self._start_averaging) //
                                 self._average_period)
 
