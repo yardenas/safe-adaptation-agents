@@ -72,9 +72,13 @@ class LaMBDA(agent.Agent):
     self.critic = utils.Learner(critic, next(self.rng_seq), config.critic_opt,
                                 self.precision,
                                 features_example[None].astype(dtype))
+    self.delayed_critic = critic.init(
+        next(self.rng_seq), features_example[None].astype(dtype))
     self.safety_critic = utils.Learner(safety_critic, next(self.rng_seq),
                                        config.safety_critic_opt, self.precision,
                                        features_example[None].astype(dtype))
+    self.delayed_safety_critic = safety_critic.init(
+        next(self.rng_seq), features_example[None].astype(dtype))
     self.lagrangian = utils.Learner(augmented_lagrangian, next(self.rng_seq),
                                     {}, self.precision, 1., 0.)
     self.replay_buffer = replay_buffer
@@ -149,8 +153,8 @@ class LaMBDA(agent.Agent):
   def train(self):
     print("Updating world model and actor-critic.")
     # Use the critic params for the previous iteration to update to actor.
-    critic_params = self.critic.params
-    safety_critic_params = self.safety_critic.params
+    critic_params = self.delayed_critic
+    safety_critic_params = self.delayed_safety_critic
     for batch in tqdm(
         self.replay_buffer.sample(self.config.update_steps),
         leave=False,
@@ -179,6 +183,8 @@ class LaMBDA(agent.Agent):
       # Average training metrics across update steps.
       for k, v in reports.items():
         self.logger[k] = v.mean()
+    self.delayed_critic = self.critic.params
+    self.delayed_safety_critic = self.safety_critic.params
     if self.config.evaluate_model:
       self.evaluate_model()
     self.logger.log_metrics(self.training_step)
@@ -194,7 +200,7 @@ class LaMBDA(agent.Agent):
       outputs_infer = infer(params, key, batch.o[:, 1:], batch.a)
       (prior, posterior), features, decoded, reward, cost = outputs_infer
       kl_loss = balanced_kl_loss(posterior, prior, config.free_kl,
-                                     config.kl_mix)
+                                 config.kl_mix)
       log_p_obs = decoded.log_prob(batch.o[:, 1:]).astype(jnp.float32).mean()
       log_p_rews = reward.log_prob(batch.r).mean()
       # Generally costs can be greater than 1. (especially if we use
@@ -369,8 +375,7 @@ class LaMBDA(agent.Agent):
 
 # https://github.com/danijar/dreamerv2/blob/259e3faa0e01099533e29b0efafdf240adeda4b5/common/nets.py#L130
 def balanced_kl_loss(posterior: tfd.Distribution, prior: tfd.Distribution,
-                     free_nats: float,
-                     mix: float) -> jnp.ndarray:
+                     free_nats: float, mix: float) -> jnp.ndarray:
   sg = lambda x: jax.tree_map(jax.lax.stop_gradient, x)
   lhs = tfd.kl_divergence(posterior, sg(prior)).mean()
   rhs = tfd.kl_divergence(sg(posterior), prior).mean()
