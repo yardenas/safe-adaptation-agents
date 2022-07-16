@@ -60,16 +60,16 @@ class SWAG(u.Learner):
                scale: float = 1.):
     super(SWAG, self).__init__(model, seed, optimizer_config, precision,
                                *input_example)
-    base_lr = optimizer_config.get('lr', 1e-3)
-    schedule = cyclic_learning_rate(base_lr, base_lr * learning_rate_factor,
-                                    average_period)
-    self.optimizer = optax.flatten(
-        optax.chain(
-            optax.clip_by_global_norm(
-                optimizer_config.get('clip', float('inf'))),
-            optax.adam(
-                learning_rate=schedule, eps=optimizer_config.get('eps', 1e-8)),
-        ))
+    # base_lr = optimizer_config.get('lr', 1e-3)
+    # schedule = cyclic_learning_rate(base_lr, base_lr * learning_rate_factor,
+    #                                 average_period)
+    # self.optimizer = optax.flatten(
+    #     optax.chain(
+    #         optax.clip_by_global_norm(
+    #             optimizer_config.get('clip', float('inf'))),
+    #         optax.adam(
+    #             learning_rate=schedule, eps=optimizer_config.get('eps', 1e-8)),
+    #     ))
     self.opt_state = self.optimizer.init(self.params)
     self._start_averaging = start_averaging
     self._average_period = average_period
