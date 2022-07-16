@@ -347,7 +347,8 @@ class LaMBDA(agent.Agent):
                                                      policy_params)
     # The cost decoder predicts an indicator ({0, 1}) but the total cost
     # is summed if `action_repeat` > 1
-    return trajectories, reward.mean(), cost.mean() * self.config.action_repeat
+    cost = cost.mean().astype(jnp.float32) * self.config.action_repeat
+    return trajectories, reward.mean(), cost
 
   @property
   def time_to_update(self):
