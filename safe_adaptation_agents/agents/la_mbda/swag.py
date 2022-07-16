@@ -99,11 +99,12 @@ class SWAG(u.Learner):
 
   @property
   def warm(self):
-    count = self.state.iterations
-    average_period = self._average_period
-    num_snapshots = max(0, (count - self._start_averaging) // average_period)
-    max_num_models = self._max_num_models
-    return count >= self._start_averaging and num_snapshots >= max_num_models
+    return False
+    # count = self.state.iterations
+    # average_period = self._average_period
+    # num_snapshots = max(0, (count - self._start_averaging) // average_period)
+    # max_num_models = self._max_num_models
+    # return count >= self._start_averaging and num_snapshots >= max_num_models
 
   def grad_step(self, grads, state: SWAGLearningState) -> SWAGLearningState:
     learning_state = super(SWAG, self).grad_step(grads, state.learning_state)
