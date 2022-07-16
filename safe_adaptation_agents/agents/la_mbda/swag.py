@@ -107,10 +107,10 @@ class SWAG(u.Learner):
 
   def grad_step(self, grads, state: SWAGLearningState) -> SWAGLearningState:
     learning_state = super(SWAG, self).grad_step(grads, state.learning_state)
-    mu, variance, covariance = self._update_stats(learning_state, state.mu,
-                                                  state.variance,
-                                                  state.covariance)
-    return SWAGLearningState(learning_state, mu, variance, covariance)
+    # mu, variance, covariance = self._update_stats(learning_state, state.mu,
+    #                                               state.variance,
+    #                                               state.covariance)
+    return SWAGLearningState(learning_state, state.mu, state.variance, state.covariance)
 
   def _update_stats(self, updated_state: u.LearningState, mu: hk.Params,
                     variance: hk.Params,
