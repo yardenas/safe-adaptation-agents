@@ -34,6 +34,7 @@ def interact(agent: Agent,
   # Discard transitions from environments such that episodes always finish
   # after time_limit.
   discard = min(steps // environment.time_limit, environment.num_envs)
+  episode_steps = 0
   with tqdm(total=steps) as pbar:
     while step < steps:
       if render_episodes:
@@ -55,11 +56,13 @@ def interact(agent: Agent,
       if transition.last:
         render_episodes = max(render_episodes - 1, 0)
         if on_episode_end:
-          on_episode_end(episodes[-1], adapt)
+          on_episode_end(episodes[-1], adapt, episode_steps)
+        episode_steps = 0
         observations = environment.reset()
         episodes.append(defaultdict(list, {'observation': [observations]}))
       transition_steps = sum(transition.steps)
       step += transition_steps
+      episode_steps += transition_steps
       pbar.update(transition_steps)
     if not episodes[-1] or len(episodes[-1]['reward']) == 0:
       episodes.pop()
