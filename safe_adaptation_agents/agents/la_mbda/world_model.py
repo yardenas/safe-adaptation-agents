@@ -70,7 +70,7 @@ class WorldModel(hk.Module):
       initial_features: jnp.ndarray,
       actor: hk.Transformed,
       actor_params: hk.Params,
-      actions=None) -> Tuple[jnp.ndarray, tfd.Normal, tfd.Bernoulli]:
+      actions=None) -> [jnp.ndarray, tfd.Normal, tfd.Bernoulli]:
     features = self.rssm.generate_sequence(initial_features, actor,
                                            actor_params, actions)
     reward = self.reward(features)
@@ -79,10 +79,8 @@ class WorldModel(hk.Module):
 
   def observe_sequence(
       self, observations: jnp.ndarray, actions: jnp.ndarray
-  ) -> [
-      Tuple[tfd.MultivariateNormalDiag, tfd.MultivariateNormalDiag],
-      jnp.ndarray, tfd.Normal, tfd.Normal, tfd.Bernoulli
-  ]:
+  ) -> [[tfd.MultivariateNormalDiag, tfd.MultivariateNormalDiag], jnp.ndarray,
+        tfd.Normal, tfd.Normal, tfd.Bernoulli]:
     observations = self.encoder(observations)
     dists, features = self.rssm.observe_sequence(observations, actions)
     reward = self.reward(features)

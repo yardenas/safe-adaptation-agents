@@ -70,7 +70,7 @@ class SWAG(u.Learner):
     #         optax.adam(
     #             learning_rate=schedule, eps=optimizer_config.get('eps', 1e-8)),
     #     ))
-    self.opt_state = self.optimizer.init(self.params)
+    # self.opt_state = self.optimizer.init(self.params)
     self._start_averaging = start_averaging
     self._average_period = average_period
     self._max_num_models = max_num_models

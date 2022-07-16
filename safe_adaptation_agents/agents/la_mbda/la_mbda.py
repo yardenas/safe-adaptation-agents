@@ -193,7 +193,7 @@ class LaMBDA(agent.Agent):
       _, _, infer, _ = self.model.apply
       outputs_infer = infer(params, key, batch.o[:, 1:], batch.a)
       (prior, posterior), features, decoded, reward, cost = outputs_infer
-      kl_loss, kl = balanced_kl_loss(posterior, prior, config.free_kl,
+      kl_loss = balanced_kl_loss(posterior, prior, config.free_kl,
                                      config.kl_mix)
       log_p_obs = decoded.log_prob(batch.o[:, 1:]).astype(jnp.float32).mean()
       log_p_rews = reward.log_prob(batch.r).mean()
@@ -207,7 +207,7 @@ class LaMBDA(agent.Agent):
       posterior_entropy = posterior.entropy().astype(jnp.float32).mean()
       prior_entropy = prior.entropy().astype(jnp.float32).mean()
       return loss_, {
-          'agent/model/kl': kl,
+          'agent/model/kl': kl_loss,
           'agent/model/post_entropy': posterior_entropy,
           'agent/model/prior_entropy': prior_entropy,
           'agent/model/log_p_observation': -log_p_obs,
@@ -347,7 +347,7 @@ class LaMBDA(agent.Agent):
                                                      policy_params)
     # The cost decoder predicts an indicator ({0, 1}) but the total cost
     # is summed if `action_repeat` > 1
-    return trajectories, reward.mean(), cost.mode() * self.config.action_repeat
+    return trajectories, reward.mean(), cost.mean() * self.config.action_repeat
 
   @property
   def time_to_update(self):
@@ -369,12 +369,12 @@ class LaMBDA(agent.Agent):
 # https://github.com/danijar/dreamerv2/blob/259e3faa0e01099533e29b0efafdf240adeda4b5/common/nets.py#L130
 def balanced_kl_loss(posterior: tfd.Distribution, prior: tfd.Distribution,
                      free_nats: float,
-                     mix: float) -> [jnp.ndarray, jnp.ndarray]:
+                     mix: float) -> jnp.ndarray:
   sg = lambda x: jax.tree_map(jax.lax.stop_gradient, x)
   lhs = tfd.kl_divergence(posterior, sg(prior)).mean()
   rhs = tfd.kl_divergence(sg(posterior), prior).mean()
   return (1. - mix) * jnp.maximum(lhs, free_nats) + mix * jnp.maximum(
-      rhs, free_nats), lhs
+      rhs, free_nats)
 
 
 def estimate_upper_bound(
