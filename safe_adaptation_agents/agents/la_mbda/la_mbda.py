@@ -423,6 +423,7 @@ def evaluate_model(observations, actions, key, model, model_params, precision):
   y_hat = generated_decoded.mean()
   y = observations[:1, conditioning_length + 1:]
   error = jnp.abs(y - y_hat)
-  out = y + error
-  out = ((out + 0.5) * 255).astype(jnp.uint8)
+  normalize = lambda image: ((image + 0.5) * 255).astype(jnp.uint8)
+  error = y + error
+  out = jnp.concatenate([normalize(x) for x in [y, y_hat, error]])
   return out

@@ -117,7 +117,7 @@ class RSSM(hk.Module):
       xs = actions.swapaxes(0, 1)
     init = jnp.split(initial_features, (self.c.rssm['stochastic_size'],), -1)
     _, sequence = hk.scan(step, tuple(init), xs)
-    sequence = jnp.asarray(sequence).swapaxes(0, 1)
+    sequence = sequence.swapaxes(0, 1)
     return sequence
 
   def observe_sequence(
