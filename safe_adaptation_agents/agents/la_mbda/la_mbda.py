@@ -157,7 +157,7 @@ class LaMBDA(agent.Agent):
         total=self.config.update_steps):
       self.model.state, model_report, features = self.update_model(
           self.model.state, batch, next(self.rng_seq))
-      if self.model.warm:
+      if self.model.warm and False:
         model_posteriors = self.model.posterior_samples(
             self.config.posterior_samples, next(self.rng_seq))
       else:

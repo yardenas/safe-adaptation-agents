@@ -81,18 +81,19 @@ def _append(transition: Transition, episode: DefaultDict) -> DefaultDict:
 
 class Driver:
 
-  def __init__(self,
-               adaptation_steps: int,
-               query_steps: int,
-               time_limit: int,
-               action_repeat: int,
-               observation_shape: Tuple,
-               action_shape: Tuple,
-               expose_task_id: bool = False,
-               on_episode_end: Optional[Callable[[EpisodeSummary, str, bool],
-                                                 None]] = None,
-               render_episodes: int = 0,
-               render_mode: str = 'rgb_array'):
+  def __init__(
+      self,
+      adaptation_steps: int,
+      query_steps: int,
+      time_limit: int,
+      action_repeat: int,
+      observation_shape: Tuple,
+      action_shape: Tuple,
+      expose_task_id: bool = False,
+      on_episode_end: Optional[Callable[[EpisodeSummary, str, bool, int],
+                                        None]] = None,
+      render_episodes: int = 0,
+      render_mode: str = 'rgb_array'):
     num_steps = time_limit // action_repeat
     self.adaptation_buffer = etb.EpisodicTrajectoryBuffer(
         adaptation_steps // time_limit, num_steps, observation_shape,
@@ -109,9 +110,11 @@ class Driver:
           train: bool) -> [IterationSummary, IterationSummary]:
     iter_adaptation_episodes, iter_query_episodes = {}, {}
     for i, (task_name, task) in enumerate(tasks):
-      callback = lambda summary, adapt: self.episode_callback(
-          summary, task_name, adapt
-      ) if self.episode_callback is not None else None
+      if self.episode_callback is not None:
+        callback = lambda summary, adapt, steps: self.episode_callback(
+            summary, task_name, adapt, steps)
+      else:
+        callback = None
       if self.adaptation_steps > 0:
         env.reset(options={'task': task})
         agent.observe_task_id(task_name if self.expose_task_id else None)
