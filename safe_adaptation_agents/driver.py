@@ -50,8 +50,8 @@ def interact(agent: Agent,
       if train:
         agent.observe(transition, adapt)
       # Append adaptation data if needed.
-      if adaptation_buffer is not None:
-        adaptation_buffer.add(transition)
+      # if adaptation_buffer is not None:
+        # adaptation_buffer.add(transition)
       observations = next_observations
       if transition.last:
         render_episodes = max(render_episodes - 1, 0)
