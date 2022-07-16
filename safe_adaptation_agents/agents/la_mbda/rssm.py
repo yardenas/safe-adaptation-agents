@@ -40,7 +40,7 @@ class Prior(hk.Module):
         self.c['stochastic_size'] * 2, name='h3', w_init=initializer('glorot'))(
             x)
     mean, stddev = jnp.split(x, 2, -1)
-    stddev = jnn.softplus(stddev) + 1.
+    stddev = jnn.softplus(stddev) + 0.1
     prior = tfd.MultivariateNormalDiag(mean, stddev)
     sample = prior.sample(seed=hk.next_rng_key())
     return prior, (sample, det)
