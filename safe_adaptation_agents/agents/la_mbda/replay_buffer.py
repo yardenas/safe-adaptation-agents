@@ -41,7 +41,7 @@ class ReplayBuffer:
     self.idx = 0
     self._dtype = dtype
     self._dataset = self._buffer.as_dataset(batch_size,
-                                            self._sequence_length + 1)
+                                            self._sequence_length)
     self._dataset = self._dataset.map(self._preprocess,
                                       tf.data.experimental.AUTOTUNE)
     self._dataset = self._dataset.prefetch(10)
