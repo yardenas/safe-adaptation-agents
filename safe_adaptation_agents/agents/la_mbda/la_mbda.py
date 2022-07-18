@@ -42,8 +42,6 @@ def discount_sequence(factor, length):
 
 # First vmap the time horizon axis.
 lambda_values = jax.vmap(lambda_values, (0, 0, None, None))
-# Then merge the posterior samples axis and batch axis.
-batched_lambda_values = hk.BatchApply(lambda_values)
 
 
 class UpdateActorResult(NamedTuple):
@@ -251,6 +249,8 @@ class LaMBDA(agent.Agent):
     # Flatten the features so that trajectory sampling starts from every
     # state in the model-inferred features.
     flattened_features = features.reshape((-1, features.shape[-1]))
+    # Then merge the posterior samples axis and batch axis.
+    batched_lambda_values = hk.BatchApply(lambda_values)
 
     def loss(params: hk.Params):
       trajectories, reward, cost = generate_trajectories(
@@ -299,7 +299,7 @@ class LaMBDA(agent.Agent):
   def update_critic(self, state: LearningState, old_params: hk.Params,
                     trajectories: jnp.ndarray,
                     rewards: jnp.ndarray) -> Tuple[LearningState, dict]:
-    reward_values = self.critic.apply(old_params, trajectories[:, :1]).mean()
+    reward_values = self.critic.apply(old_params, trajectories[:, 1:]).mean()
     reward_lambdas = lambda_values(reward_values, rewards[:, :-1],
                                    self.config.discount, self.config.lambda_)
 
