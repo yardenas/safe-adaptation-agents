@@ -35,6 +35,11 @@ def lambda_values(next_values: jnp.ndarray, rewards: jnp.ndarray,
   return utils.discounted_cumsum(tds, lambda_ * discount)
 
 
+def discount_sequence(factor, length):
+  d = np.cumprod(factor * np.ones((length,))) / factor
+  return d
+
+
 # First vmap the time horizon axis.
 lambda_values = jax.vmap(lambda_values, (0, 0, None, None))
 # Then merge the posterior samples axis and batch axis.
@@ -256,7 +261,10 @@ class LaMBDA(agent.Agent):
                                              self.config.lambda_)
       optimistic_sample, reward_lambdas, reward = estimate_upper_bound(
           trajectories, reward_lambdas, reward)
-      loss_ = (-reward_lambdas).astype(jnp.float32).mean()
+      discount = discount_sequence(self.config.discount,
+                                   self.config.imag_horizon - 1)
+      objective = reward_lambdas * discount
+      loss_ = (-objective).astype(jnp.float32).mean()
       if self.safe:
         cost_values = cost_critic(trajectories[:, :, 1:]).mean()
         cost_lambdas = batched_lambda_values(cost_values, cost[:, :, :-1],
