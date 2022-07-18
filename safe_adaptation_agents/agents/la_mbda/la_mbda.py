@@ -345,7 +345,10 @@ class LaMBDA(agent.Agent):
     })
     finite = jmp.all_finite(new_params)
     new_params = jmp.select_tree(finite, new_params, state.params)
-    report = {'agent/lagrangian': new_lagrangian, 'agent/penatly': new_penalty}
+    report = {
+        'agent/lagrangian/lagrangian': new_lagrangian,
+        'agent/lagrangian/penalty_multiplier': new_penalty
+    }
     return LearningState(new_params, state.opt_state), report
 
   def _generate_trajectories(
