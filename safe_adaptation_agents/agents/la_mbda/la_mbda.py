@@ -270,15 +270,21 @@ class LaMBDA(agent.Agent):
         cond = np.array([0.])
         pessimistic_sample = optimistic_sample
         cost_lambdas = jnp.zeros_like(reward_lambdas)
+        penalty = np.array([0.])
+      report = {
+          'agent/actor/pred_constraint': cost_lambdas.mean(),
+          'agent/actor/penalty': penalty,
+          'agent/actor/safety_cond': cond
+      }
       return loss_, (UpdateActorResult(optimistic_sample, pessimistic_sample,
-                                       reward, cost, cond), cost_lambdas)
+                                       reward, cost, cond), report)
 
     (loss_, aux), grads = jax.value_and_grad(loss, has_aux=True)(state.params)
     new_state = self.actor.grad_step(grads, state)
     return new_state, {
         'agent/actor/loss': loss_,
         'agent/actor/grads': optax.global_norm(grads),
-        'agent/actor/pred_constraint': aux[1].mean()
+        **aux[1]
     }, aux[0]
 
   @partial(jax.jit, static_argnums=0)
@@ -386,23 +392,7 @@ def balanced_kl_loss(posterior: tfd.Distribution, prior: tfd.Distribution,
 def estimate_upper_bound(
     trajectories: jnp.ndarray, values: jnp.ndarray,
     rewards: jnp.ndarray) -> [jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-  ids = jnp.argmax(values.mean(2), axis=0)
-  value_upper_bound = jnp.take_along_axis(
-      values,
-      ids[None, :, None],
-      0,
-  ).squeeze(0)
-  rewards_upper_bound = jnp.take_along_axis(
-      rewards,
-      ids[None, :, None],
-      0,
-  ).squeeze(0)
-  trajectories_upper_bound = jnp.take_along_axis(
-      trajectories,
-      ids[None, :, None, None],
-      0,
-  ).squeeze(0)
-  return trajectories_upper_bound, value_upper_bound, rewards_upper_bound
+  return trajectories[0], values[0], rewards[0]
 
 
 @partial(jax.jit, static_argnums=(3, 5))
