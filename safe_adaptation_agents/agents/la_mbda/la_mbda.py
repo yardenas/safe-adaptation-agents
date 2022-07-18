@@ -262,7 +262,7 @@ class LaMBDA(agent.Agent):
       optimistic_sample, reward_lambdas, reward = estimate_upper_bound(
           trajectories, reward_lambdas, reward)
       discount = discount_sequence(self.config.discount,
-                                   self.config.imag_horizon - 1)
+                                   self.config.sample_horizon - 1)
       objective = reward_lambdas * discount
       loss_ = (-objective).astype(jnp.float32).mean()
       if self.safe:
